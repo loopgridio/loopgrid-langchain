@@ -1,0 +1,39 @@
+name: Publish LoopGrid LangChain to PyPI
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: vars.LOOPGRID_PYPI_PUBLISH_ENABLED == 'true' && startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/loopgrid-langchain/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install packaging tools
+        run: python -m pip install build twine
+      - name: Check tag is exactly package version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,tomllib
+          with open('pyproject.toml','rb') as f: p=tomllib.load(f)
+          assert os.environ['GITHUB_REF_NAME']=='v'+p['project']['version'],'Release tag/version mismatch'
+          PY
+      - name: Build distributions
+        run: python -m build
+      - name: Validate distribution archives
+        run: python scripts/check_dist.py
+      - name: Validate metadata
+        run: python -m twine check dist/*
+      - name: Publish through PyPI OIDC
+        uses: pypa/gh-action-pypi-publish@release/v1
